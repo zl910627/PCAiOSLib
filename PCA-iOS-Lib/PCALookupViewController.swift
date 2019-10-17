@@ -66,6 +66,7 @@ public class PCALookupViewController: UIViewController, UITableViewDataSource, U
             }
             //Seperate the highlight string into an array of highlights
             let highlightArr = highlightSeperateArr[i].components(separatedBy: ",");
+            let fullRange = NSMakeRange(0, attributedString.length - 11)
             
             //Loop though the highlights
             for h in highlightArr {
@@ -79,10 +80,13 @@ public class PCALookupViewController: UIViewController, UITableViewDataSource, U
                     let length = highlightNumbers[1] - highlightNumbers[0];
                     
                     //Build the range object
-                    let range = NSRange(location: location, length: length);
+                    var range = NSRange(location: location, length: length);
+                    range = NSIntersectionRange(range, fullRange)
                     
                     //Apply the bold attribute to the string, based on the range
-                    attributedString.addAttributes(boldFontAttribute, range: range);
+                    if range.length > 0 {
+                        attributedString.addAttributes(boldFontAttribute, range: range);
+                    }
                 }
             }
         }
@@ -98,7 +102,9 @@ public class PCALookupViewController: UIViewController, UITableViewDataSource, U
     
     
     var manager: Alamofire.SessionManager? = nil;
+/*
     let locationManager = CLLocationManager()
+*/
     
     override public func viewDidLoad() {
         super.viewDidLoad()
@@ -115,10 +121,12 @@ public class PCALookupViewController: UIViewController, UITableViewDataSource, U
         
         registerForKeyboardNotifications();
         manager = Alamofire.SessionManager();
-        self.locationManager.distanceFilter = kCLDistanceFilterNone
-        self.locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
-        self.locationManager.requestWhenInUseAuthorization()
-        self.locationManager.startUpdatingLocation()
+/*
+        locationManager.distanceFilter = kCLDistanceFilterNone
+        locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
+*/
         searchField.becomeFirstResponder()
     }
     
@@ -145,19 +153,20 @@ public class PCALookupViewController: UIViewController, UITableViewDataSource, U
     let host: String = "api.addressy.com";
     
     func MakeFindRequest(){
-        
+/*
         let lat = locationManager.location?.coordinate.latitude;
         let long = locationManager.location?.coordinate.longitude;
-        
+*/
         var url = "https://" + host + "/capture/interactive/find/v1.00/json3.ws?key=" + key + "&Text=" + searchField.text!.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!;
         if(currentItem != nil){
             url += "&container=" + (currentItem?.Id!.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)!)!;
         }
-        
+        url += "&origin=uk"
+/*
         if(lat != nil && long != nil){
             url += "&origin=\(lat!),\(long!)"
         }
-        
+*/
         
         if let cachedResponse = self.addressCache[url] {
             self.currentResponse = cachedResponse;
@@ -167,7 +176,7 @@ public class PCALookupViewController: UIViewController, UITableViewDataSource, U
             manager?.request(url)
                 .responseObject { (response: DataResponse<FindResponse>) in
                     
-                    let fetchResponse = response.result.value;
+                    let fetchResponse = response.result.value
                     
                     if fetchResponse?.Items?.count == 1 && fetchResponse?.Items?.first?.Error != nil {
                         //PCA Error
@@ -176,8 +185,14 @@ public class PCALookupViewController: UIViewController, UITableViewDataSource, U
                     }
                     
                     if(fetchResponse != nil){
-                        self.addressCache[url] = fetchResponse;
-                        self.currentResponse = fetchResponse!;
+                        let list = fetchResponse!
+                        list.Items = list.Items?.filter { $0.Id?.hasPrefix("GB") == true }
+                        if(self.currentItem != nil) {
+                            list.Items?.sort { ($0.Text  ?? "") < ($1.Text ?? "") }
+                        }
+                        
+                        self.addressCache[url] = list
+                        self.currentResponse = list
                         //self.outputTable.reloadData();
                         let range = NSMakeRange(0, self.outputTable.numberOfSections)
                         let sections = NSIndexSet(indexesIn: range)
